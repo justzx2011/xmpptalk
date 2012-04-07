@@ -72,53 +72,6 @@ def check_auth(self, msg):
     self.xmpp_add_user(bare)
   return True
 
-class MessageMixin:
-  def handle_message(self, msg, timestamp=None):
-    '''apply handlers; timestamp indicates a delayed messages'''
-    for h in _message_handles:
-      ret = h(self, msg)
-      if ret is True:
-        break
-      elif isinstance(ret, str):
-        msg = ret
-    else:
-      if self.now < self.current_user.mute_until:
-        t = (self.current_user.mute_until + \
-             config.timezoneoffset).strftime(dateformat)
-        self.reply(_('You are disallowed to speak until %s') % t)
-        return
-      msg = msg.strip()
-      if not msg:
-        return
-      self.user_update_msglog(msg)
-      msg = '[%s] ' % self.user_get_nick(str(self.current_jid.bare())) + msg
-      if self.current_user.stop_until > self.now:
-        self.user_reset_stop() # self.current_user is reloaded here
-      self.dispatch_message(msg, timestamp)
-
-  def dispatch_message(self, msg, timestamp=None, but=None):
-    '''dispatch message to group members, also log the message in database'''
-    if but is None:
-      but = {self.current_user.jid}
-
-    if timestamp:
-      dt = datetime.datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ')
-      interval = self.now - dt
-      if interval.days == 0:
-        dt += config.timezoneoffset
-        msg = '(%s) ' % dt.strftime(timeformat) + msg
-
-    logmsg(self.current_jid, msg)
-    for u in self.get_message_receivers():
-      if str(u) not in but:
-        self.send_message(u, msg)
-    return True
-
-  def get_message_receivers(self):
-    allusers = {u['jid'] for u in models.connection.User.find({
-      'stop_until': {'$lte': self.now}
-    }, ['jid'])}
-    return [u for u in self.get_online_users() if str(u) in allusers]
 
 try:
   from plugin import message_plugin_early

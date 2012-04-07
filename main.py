@@ -13,14 +13,11 @@ import pyxmpp2.exceptions
 from pyxmpp2.jid import JID
 from pyxmpp2.message import Message
 from pyxmpp2.presence import Presence
-from pyxmpp2.client import Client
 from pyxmpp2.settings import XMPPSettings
 from pyxmpp2.roster import RosterReceivedEvent
 from pyxmpp2.interfaces import EventHandler, event_handler, QUIT, NO_CHANGE
 from pyxmpp2.streamevents import AuthorizedEvent, DisconnectedEvent
-from pyxmpp2.interfaces import XMPPFeatureHandler
 from pyxmpp2.interfaces import presence_stanza_handler, message_stanza_handler
-from pyxmpp2.ext.version import VersionProvider
 from pyxmpp2.expdict import ExpiringDictionary
 from pyxmpp2.iq import Iq
 
@@ -34,23 +31,6 @@ from user import UserMixin
 class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
   got_roster = False
   message_queue = None
-
-  def __init__(self, jid, settings):
-    if 'software_name' not in settings:
-      settings['software_name'] = self.__class__.__name__
-    if 'software_version' not in settings:
-      settings['software_version'] = __version__
-    version_provider = VersionProvider(settings)
-    self.client = Client(jid, [self, version_provider], settings)
-    self.presence = defaultdict(dict)
-    self.subscribes = ExpiringDictionary(default_timeout=5)
-
-  def run(self):
-    self.client.connect()
-    self.jid = self.client.jid.bare()
-    logger.info('self jid: %r', self.jid)
-    self.update_on_setstatus = set()
-    self.client.run()
 
   def disconnect(self):
     '''Request disconnection and let the main loop run for a 2 more
