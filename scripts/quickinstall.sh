@@ -1,4 +1,22 @@
 #!/bin/bash -e
+#
+# (C) Copyright 2012 lilydjwg <lilydjwg@gmail.com>
+#
+# This file is part of xmpptalk.
+#
+# xmpptalk is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# xmpptalk is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with xmpptalk.  If not, see <http://www.gnu.org/licenses/>.
+#
 
 install_xz () {
   save_pwd=$PWD
@@ -139,7 +157,7 @@ install_hg () {
 install_mongo () {
   save_pwd=$PWD
   cd soft
-  name=mongodb-linux-$(arch)-2.0.2
+  name=mongodb-linux-$(uname -m)-2.0.2
   wget -c http://fastdl.mongodb.org/linux/$name.tgz
   tar xzf $name.tgz
   cd $name

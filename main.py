@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
 # vim:fileencoding=utf-8
+#
+# (C) Copyright 2012 lilydjwg <lilydjwg@gmail.com>
+#
+# This file is part of xmpptalk.
+#
+# xmpptalk is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# xmpptalk is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with xmpptalk.  If not, see <http://www.gnu.org/licenses/>.
+#
 
 import sys
 import os
@@ -144,17 +162,31 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
     presence = Presence(to_jid=jid, stanza_type='unsubscribe')
     self.send(presence)
 
+  def subscribe(self, jid):
+    self.invited[jid] = 2
+    presence = Presence(to_jid=jid, stanza_type='subscribe')
+    self.send(presence)
+
   @presence_stanza_handler('subscribe')
   def handle_presence_subscribe(self, stanza):
     logging.info('%s subscribe', stanza.from_jid)
     sender = stanza.from_jid
     bare = sender.bare()
 
-    if config.private and str(bare) != config.root:
-      return stanza.make_deny_response()
-
-    if not self.handle_userjoin_before():
-      return stanza.make_deny_response()
+    invited = self.invited.get(bare, False)
+    if invited is not False:
+      if invited is 2:
+        self.invited[bare] = 1
+      else:
+        del self.invited[bare]
+        return stanza.make_accept_response()
+      # We won't deny inivted members
+      self.handle_userjoin_before()
+    else:
+      if config.private and str(bare) != config.root:
+        return stanza.make_deny_response()
+      if not self.handle_userjoin_before():
+        return stanza.make_deny_response()
 
     # avoid repeated request
     if bare not in self.subscribes:
@@ -170,9 +202,10 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
     if stanza.stanza_type.endswith('ed'):
       return stanza.make_accept_response()
 
-    presence = Presence(to_jid=stanza.from_jid.bare(),
-                        stanza_type='subscribe')
-    return [stanza.make_accept_response(), presence]
+    if invited is False:
+      presence = Presence(to_jid=stanza.from_jid.bare(),
+                          stanza_type='subscribe')
+      return [stanza.make_accept_response(), presence]
 
   @presence_stanza_handler('subscribed')
   def handle_presence_subscribed(self, stanza):

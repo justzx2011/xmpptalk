@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # (C) Copyright 2012 lilydjwg <lilydjwg@gmail.com>
 #
@@ -18,9 +18,15 @@
 # along with xmpptalk.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-unset GIT_DIR
-cd ../xmpptalk
-CUR_VER=$(git log -1 --format="%H")
-git pull
-git diff $CUR_VER..HEAD config.py.example > diff
-[ -s diff ] && patch config.py diff
+prefix=${prefix:-/usr/local}
+
+mkdir -p $prefix/var/{lib,log}/mongodb
+touch $prefix/var/log/mongodb/mongodb.log
+
+id mongo >/dev/null 2>/dev/null || useradd -d $prefix/var/lib/mongodb -r mongo
+
+chown -R mongo $prefix/var/{lib,log}/mongodb
+
+cd $(dirname $0)
+cp ./mongodb.conf.example $prefix/etc/mongodb.conf
+[[ prefix = /usr/local ]] || sed -i "s=/usr/local=$prefix=g" $prefix/etc/mongodb.conf

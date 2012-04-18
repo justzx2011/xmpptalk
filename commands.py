@@ -1,3 +1,21 @@
+#
+# (C) Copyright 2012 lilydjwg <lilydjwg@gmail.com>
+#
+# This file is part of xmpptalk.
+#
+# xmpptalk is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# xmpptalk is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with xmpptalk.  If not, see <http://www.gnu.org/licenses/>.
+#
 from functools import wraps
 import logging
 import datetime
@@ -5,6 +23,7 @@ import struct
 import subprocess
 
 from mongokit.schema_document import ValidationError
+from pyxmpp2.exceptions import JIDError
 
 import models
 from models import logmsg
@@ -18,7 +37,7 @@ command handling, should be called from messages.py
 # key is the command name, value is a (func, doc, flags) tuple
 __commands = {}
 logger = logging.getLogger(__name__)
-__brief_help = ('nick', 'pm', 'old', 'online', 'stop')
+__brief_help = ('nick', 'pm', 'old', 'online', 'stop', 'quit')
 
 def command(name, doc, flags=PERM_USER):
   '''decorate and register a function that handles a command
@@ -78,7 +97,11 @@ def do_about(self, arg):
                 (secs % 3600) // 60
               ))
 
-@command('help', _('display this brief help'))
+@command('free', _('invode `free -m` and show its output'))
+def do_free(self, arg):
+  out = subprocess.getoutput('free -m')
+  self.reply(out)
+@command('help', _('display a brief help'))
 def do_help(self, arg):
   help = []
   for name in __brief_help:
@@ -95,6 +118,24 @@ def do_help(self, arg):
 @command('iam', _('show information about yourself'))
 def do_iam(self, arg):
   self.reply(user_info(self.current_user, self.presence, show_lastseen=True))
+
+@command('invite', _('invite someone to join'), PERM_GPADMIN)
+def do_invite(self, arg):
+  arg = arg.strip()
+  jid, *args = arg.split()
+  try:
+    models.validate_jid(jid)
+  except (ValidationError, JIDError) as e:
+    self.reply(_('Error: %s') % str(e))
+    return
+
+  u = self.get_user_by_jid(jid)
+  if u and not (args and args[0] == '-f'):
+    self.reply(_('This user is already a member in this group, known as %s') % u.nick)
+    return
+
+  self.subscribe(jid)
+  self.reply(_('Invitation sent, please wait for approval.'))
 
 @command('kick', _('kick out someone'), PERM_GPADMIN)
 def do_kick(self, arg):
@@ -254,12 +295,10 @@ def do_pm(self, arg):
   else:
     self.reply(_("arguments error: please give the user's nick and the message you want to send"))
 
-@command('quit', _('quit the bot'), PERM_SYSADMIN)
+@command('quit', _('quit the group; only Gtalk users need this, other client users may just remove the buddy.'))
 def do_quit(self, arg):
-  self.reply(_('Quitting...'))
-  self.dispatch_message(_('Quitting by %s...') % \
-                        self.user_get_nick(str(self.current_jid.bare())))
-  raise SystemExit(CMD_QUIT)
+  self.user_delete(u)
+  self.reply(_('See you!'))
 
 @command('restart', _('restart the process'), PERM_SYSADMIN)
 def do_restart(self, arg):
@@ -292,6 +331,13 @@ def do_setwelcome(self, arg):
     arg = None
   self.welcome = arg
   self.reply(_('ok.'))
+
+@command('shutdown', _('shutdown the bot'), PERM_SYSADMIN)
+def do_shutdown(self, arg):
+  self.reply(_('Shutting down...'))
+  self.dispatch_message(_('Shutting down by %s...') % \
+                        self.user_get_nick(str(self.current_jid.bare())))
+  raise SystemExit(CMD_QUIT)
 
 @command('stop', _('stop receiving messages for some time; useful units: m, h, d. If you stop for 0 seconds, you wake up.'))
 def do_stop(self, arg):
@@ -409,6 +455,11 @@ def do_users(self, arg):
   text.append(N_('%d user listed', '%d users listed', n) % n)
   self.reply('\n'.join(text))
 
+@command('uptime', _('invode `uptime` and show its output'))
+def do_uptime(self, arg):
+  out = subprocess.getoutput('uptime')
+  self.reply(out)
+
 @command('whois', _('show information about others'))
 def do_whois(self, arg):
   nick = arg.strip()
@@ -419,12 +470,3 @@ def do_whois(self, arg):
   else:
     self.reply(_('Nobody with the nick "%s" found.') % nick)
 
-@command('uptime', _('invode `uptime` and show its output'))
-def do_uptime(self, arg):
-  out = subprocess.getoutput('uptime')
-  self.reply(out)
-
-@command('free', _('invode `free -m` and show its output'))
-def do_free(self, arg):
-  out = subprocess.getoutput('free -m')
-  self.reply(out)

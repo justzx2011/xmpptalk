@@ -1,3 +1,21 @@
+#
+# (C) Copyright 2012 lilydjwg <lilydjwg@gmail.com>
+#
+# This file is part of xmpptalk.
+#
+# xmpptalk is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# xmpptalk is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with xmpptalk.  If not, see <http://www.gnu.org/licenses/>.
+#
 import logging
 from functools import lru_cache
 import datetime
@@ -54,7 +72,7 @@ class UserMixin:
     try:
       u.save()
     except pymongo.errors.DuplicateKeyError:
-      u = models.connection.User.one({'jid': plainjid})
+      return False
     return u
 
   def set_user_nick(self, *args, **kwargs):
@@ -222,9 +240,11 @@ class UserMixin:
 
     self._cached_jid = None
     u = self.db_add_user(plainjid)
-
-    Welcome(self.current_jid, self)
-    logger.info('%s joined', plainjid)
+    if u is False:
+      logger.warn('%s already in database', plainjid)
+    else:
+      Welcome(self.current_jid, self)
+      logger.info('%s joined', plainjid)
 
   def handle_userleave(self, action=None):
     '''user has left, delete the user from database'''
