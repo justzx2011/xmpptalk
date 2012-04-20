@@ -16,29 +16,3 @@
 # You should have received a copy of the GNU General Public License
 # along with xmpptalk.  If not, see <http://www.gnu.org/licenses/>.
 #
-from pyxmpp2.interfaces import XMPPFeatureHandler
-from pyxmpp2.ext.version import VersionProvider
-from pyxmpp2.client import Client
-
-class XMPPClient(XMPPFeatureHandler):
-  def __init__(self, settings):
-    version_provider = VersionProvider(settings)
-    self.client = Client(jid, [self, version_provider], settings)
-
-  def start(self):
-    self.client.connect()
-    self.client.run()
-
-  def sendMsg(self, receiver, msg):
-    receiver = JID(receiver)
-
-    m = Message(
-      stanza_type = 'chat',
-      from_jid = self.client.jid,
-      to_jid = receiver,
-      body = msg,
-    )
-    self.send(m)
-
-  def send(self, stanza):
-    self.client.stream.send(stanza)

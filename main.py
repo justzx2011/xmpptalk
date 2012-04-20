@@ -106,27 +106,6 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
     logging.info('done with new message')
     return True
 
-  def send_message(self, receiver, msg):
-    if isinstance(receiver, str):
-      receiver = JID(receiver)
-
-    m = Message(
-      stanza_type = 'chat',
-      from_jid = self.jid,
-      to_jid = receiver,
-      body = msg,
-    )
-    self.send(m)
-
-  def reply(self, msg):
-    self.send_message(self.current_jid, msg)
-
-  def send(self, stanza):
-    self.client.stream.send(stanza)
-
-  def delayed_call(self, seconds, func, *args, **kwargs):
-    self.client.main_loop.delayed_call(seconds, partial(func, *args, **kwargs))
-
   @event_handler(DisconnectedEvent)
   def handle_disconnected(self, event):
     return QUIT

@@ -16,22 +16,24 @@
 # You should have received a copy of the GNU General Public License
 # along with xmpptalk.  If not, see <http://www.gnu.org/licenses/>.
 #
+import datetime
 from util import HANDLED, ObjectDict
 
-class ChatBot(metaclass=abc.ABCMeta):
+class ChatBot:
   '''
   *Message handlers* should receive the sender, msg and returns either
   HANDLED to indicate to process no more, a string to be used as the msg, or
   anything else the bot will simply ignore and continue.
   '''
-  __version__ = 'pre-alpha'
+  __version__ = 'alpha'
 
-  def __init__(self, settings, userManager, xmppclient):
+  def __init__(self, settings, dbManager, xmppclient):
     self.settings = ObjectDict(settings)
     self.initSettings()
-    self.userManager = userManager(settings)
+    self.dbManager = dbManager(settings)
     self.xmppclient = xmppclient(settings)
     self._message_handlers = []
+    self.now = datetime.datetime.utcnow()
 
   def initSettings(self):
     settings = self.settings
@@ -40,7 +42,9 @@ class ChatBot(metaclass=abc.ABCMeta):
     if 'software_version' not in settings:
       settings['software_version'] = self.__version__
 
+  #TODO: on_message 的 wrapper
   def on_message(self, sender, msg, timestamp=None):
+    self.now = datetime.datetime.utcnow()
     for h in self._message_handlers:
       #TODO: message stipper
       ret = h(self, sender, msg)
@@ -49,32 +53,47 @@ class ChatBot(metaclass=abc.ABCMeta):
       elif isinstance(ret, str):
         msg = ret
     else:
-      #TODO userManager.speakNotAllowed
-      ret = self.userManager.speakNotAllowed(sender)
+      #TODO User.speakNotAllowedUntil
+      ret = sender.speakNotAllowedUntil(self.now)
       if ret:
         self.reply(_('You are not allowed to speak until %s') % ret)
       else:
-        #TODO self.userManager.messageSent(sender, msg)
-        self.userManager.messageSent(sender, msg)
         smsg = self.formatMsg(sender, msg, timestamp)
+        #TODO self.dbManager.logMessageSent(sender, msg)
+        self.dbManager.logMessageSent(sender, msg)
         self.dispatchMsg(smsg, exclude={sender})
 
-  @abc.abstractmethod
   def formatMsg(self, sender, msg, timestamp):
-    pass
+    if timestamp:
+      dt = datetime.datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ')
+      interval = self.now - dt
+      if interval.days == 0:
+        #TODO: config
+        dt += config.timezoneoffset
+        #TODO: timeformat
+        msg = '(%s) ' % dt.strftime(timeformat) + msg
+    #TODO: User 的属性：nick
+    msg = '[%s] ' % sender.nick + msg
+    return msg
 
   def dispatchMsg(self, msg, exclude):
-    for u in self.getMsgReceivers():
+    for u in self.getMsgReceiverJIDs():
       if u not in exclude:
         #TODO xmppclient.sendMsg
+        #TODO User.jid
         self.xmppclient.sendMsg(u, msg)
     return True
 
-  def getMsgReceivers(self):
-    #TODO self.userManager.getActiveMembers()
-    it_all = self.userManager.iterActiveMembers()
+  def reply(self, msg):
+    #TODO: self.current_user
+    self.xmppclient.sendMsg(self.current_user, msg)
+
+  def getMsgReceiverJIDs(self):
+    #TODO self.dbManager.iterActiveMembers()
+    it_all = self.dbManager.iterActiveMembers()
     online = self.xmppclient.getOnlineBuddies()
-    return [u for u in it_all if u in onlinj]
+    #TODO User.getReceiveJID
+    return [u.getReceiveJID() for u in it_all if u in online]
 
   def start(self):
     self.xmppclient.start()
