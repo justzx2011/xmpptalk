@@ -17,6 +17,7 @@
 # along with xmpptalk.  If not, see <http://www.gnu.org/licenses/>.
 #
 from functools import wraps
+import sys
 import logging
 import datetime
 import struct
@@ -90,12 +91,29 @@ def do_about(self, arg):
   secs = config.timezoneoffset.days * 86400 + config.timezoneoffset.seconds
   self.reply(_('xmpptalk is a groupchat bot using XMPP\n'
                'version: %s\n'
-               'timezone: %+03d%02d'
+               'timezone: %+03d%02d\n'
+               'https://github.com/lilydjwg/xmpptalk\n'
+               'https://bitbucket.org/lilydjwg/xmpptalk'
               ) % (
                 __version__,
                 secs // 3600,
                 (secs % 3600) // 60
               ))
+
+@command('debug', _('suspend and open debug console'), PERM_SYSADMIN)
+def do_debug(self, arg):
+  if sys.stdin.isatty():
+    import builtins
+    from cli import repl
+    from pyxmpp2.jid import JID
+    old_ = builtins._
+    g = locals()
+    del g['repl'], g['builtins'], g['old_'], g['arg']
+    repl(g, 'cmd.txt')
+    builtins._ = old_
+  else:
+    self.reply(_('Error: stdin is not terminal.'))
+  return True
 
 @command('free', _('invode `free -m` and show its output'))
 def do_free(self, arg):
@@ -297,11 +315,12 @@ def do_pm(self, arg):
 
 @command('quit', _('quit the group; only Gtalk users need this, other client users may just remove the buddy.'))
 def do_quit(self, arg):
-  self.user_delete(u)
   self.reply(_('See you!'))
+  self.user_delete(self.current_user)
 
 @command('restart', _('restart the process'), PERM_SYSADMIN)
 def do_restart(self, arg):
+  self.xmpp_setstatus(_('Restarting...'))
   self.reply(_('Restarting...'))
   raise SystemExit(CMD_RESTART)
 
@@ -373,7 +392,7 @@ def do_stop(self, arg):
     }}
   )
   self.current_user.reload()
-  t = (dt + config.timezoneoffset).strftime(dateformat)
+  t = (dt + config.timezoneoffset).strftime(longdateformat)
   self.reply(_('Ok, stop receiving messages until %s. You can change this by another `stop` command.') % t)
   self.user_update_presence(self.current_user)
 

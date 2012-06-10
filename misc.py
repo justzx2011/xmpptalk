@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 lock_fd = [-1]
 
 AWAY    = _('away')
-XAWAY   = _('away')
+XAWAY   = _('far away')
 BUSY    = _('dnd')
 ONLINE  = _('online')
 CHAT    = _('chatty')
@@ -87,6 +87,8 @@ xmpp_show_map = {
 ONE_DAY = datetime.timedelta(hours=24)
 CMD_QUIT = 1
 CMD_RESTART = 2
+
+WEEKDAYSTR = (_("Monday"), _("Tuesday"), _("Wednesday"), _("Thursday"), _("Friday"), _("Saturday"), _("Sunday"))
 
 def show_privileges(flag):
   flag = int(flag)
@@ -225,9 +227,13 @@ class TornadoLogFormatter(logging.Formatter):
     super().__init__(self, *args, **kwargs)
     self._color = color
     if color:
+      import curses
       curses.setupterm()
-      fg_color = str(curses.tigetstr("setaf") or
-                 curses.tigetstr("setf") or "", "ascii")
+      if sys.hexversion < 50463728:
+        fg_color = str(curses.tigetstr("setaf") or
+                   curses.tigetstr("setf") or "", "ascii")
+      else:
+        fg_color = curses.tigetstr("setaf") or curses.tigetstr("setf") or b""
       self._colors = {
         logging.DEBUG: str(curses.tparm(fg_color, 4), # Blue
                      "ascii"),

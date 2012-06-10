@@ -25,6 +25,7 @@ import models
 from misc import *
 
 logger = logging.getLogger(__name__)
+nick_paths = ('{vcard-temp}vCard/{vcard-temp}FN', '{vcard-temp}vCard/{vcard-temp}N/{vcard-temp}FAMILY')
 
 class Welcome(greenlet):
   def __init__(self, jid, xmpp, use_roster_nick=False):
@@ -39,18 +40,24 @@ class Welcome(greenlet):
 
   def run(self, jid, s, use_roster_nick):
     s.send_message(jid, s.welcome)
+    #FIXME: 超时处理
     s.get_vcard(jid, self.switch)
     stanza = self.parent.switch()
-    if use_roster_nick or stanza.stanza_type == 'error':
+    if use_roster_nick:
+      nick = s.get_name(jid)
+    elif stanza.stanza_type == 'error':
+      logger.warn('failed to get vCard')
       nick = s.get_name(jid)
     else:
-      try:
-        nick = stanza.as_xml.find('{vcard-temp}vCard/{vcard-temp}FN').text
-        if nick is None:
-          logger.warn('%s\'s vCard has a `None\' nick: %r', jid, stanza.as_xml)
-          nick = s.get_name(jid)
-      except AttributeError: #None
+      for path in nick_paths:
+        nickel = stanza.as_xml().find(path)
+        if nickel is not None:
+          nick = nickel.text
+          if nick:
+            break
+      else:
         nick = s.get_name(jid)
+        logger.warn('failed to get nick from vCard')
 
     while s.nick_exists(nick):
       nick += '_'
@@ -59,8 +66,8 @@ class Welcome(greenlet):
     except models.ValidationError:
       nick = hashjid(jid)
 
-    msg = _('Would you like to use "%s" as your nick, '\
-            'or use "%snick your_nick" to choose another') % (
+    msg = _('Your nick is default to "%s", '\
+            'you can use "%snick new_nick" to choose another.') % (
       nick, config.prefix
     )
     s.send_message(jid, msg)

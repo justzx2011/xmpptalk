@@ -49,7 +49,7 @@ class UserMixin:
     # not in database
     if user is None:
       user = self.db_add_user(plainjid)
-      Welcome(self.current_jid, self, use_roster_nick=True)
+      Welcome(self.current_jid, self)
 
     self._cached_jid = self.current_jid
     self._cached_user = user
@@ -233,6 +233,7 @@ class UserMixin:
   def user_delete(self, user):
     user.delete()
     self.unsubscribe(user.jid)
+    self.unsubscribe(user.jid, type='unsubscribed')
   def handle_userjoin(self, action=None):
     '''add the user to database and say Welcome'''
     # TODO: 根据 action 区别处理
@@ -257,10 +258,7 @@ class UserMixin:
   @property
   def group_status(self):
     gp = self._cached_gp or models.connection.Group.one()
-    if gp is None:
-      return ''
-    else:
-      return gp.get('status', None)
+    return gp.get('status', '')
 
   @group_status.setter
   def group_status(self, value):
@@ -274,10 +272,7 @@ class UserMixin:
   @property
   def welcome(self):
     gp = self._cached_gp or models.connection.Group.one()
-    if gp is None:
-      return DEFAULT_WELOME
-    else:
-      return gp.get('welcome', DEFAULT_WELOME)
+    return gp.get('welcome') or DEFAULT_WELOME
 
   @welcome.setter
   def welcome(self, value):

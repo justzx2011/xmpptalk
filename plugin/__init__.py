@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 re_youren = re.compile(r'有人在?吗.{,3}')
 re_link = re.compile(r' <https?://(?!i.imgur.com/)[^>]+>')
 re_link_js = re.compile(r' <javascript:[^>]+>')
+re_repeating_char = re.compile(r'(.)\1{4,}')
 
 filtered_message = (
   "I'm currently away and will reply as soon as I return to eBuddy on my iPod touch",
@@ -39,19 +40,8 @@ filtered_message = (
   '<ding>', # Smack 客户端的「抖屏」
 )
 
-def debug(self, msg):
-  '''debug things; unregister in production!'''
-  if msg == 'cli':
-    import builtins
-    from cli import repl
-    from pyxmpp2.jid import JID
-    old_ = builtins._
-    g = locals()
-    del g['repl'], g['builtins'], g['old_'], g['msg']
-    repl(g, 'cmd.txt')
-    builtins._ = old_
-    return True
-  elif msg == 'cache_clear':
+def cache_clear(self, msg):
+  if msg == 'cache_clear':
     self.user_get_nick.cache_clear()
     self.reply('ok.')
     return True
@@ -79,7 +69,10 @@ def remove_links(self, msg):
   if len(links) != 1:
     msg = re_link.sub('', msg)
   msg = re_link_js.sub('', msg)
-  return msg
+  new_msg = re_repeating_char.sub(r'\1\1\1', msg)
+  if msg != new_msg:
+    self.reply(_('Too many repeating characters, cleaned up to: ') + new_msg)
+  return new_msg
 
 def post_code(msg):
   '''将代码贴到网站，返回 URL 地址 或者 None（失败）'''
@@ -117,7 +110,7 @@ def long_text_check(self, msg):
 message_plugin_early = [
 ]
 message_plugin = [
-  debug, autoreply, filter_autoreply,
+  cache_clear, autoreply, filter_autoreply,
   long_text_check,
   remove_links,
 ]

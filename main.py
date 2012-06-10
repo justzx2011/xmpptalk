@@ -85,8 +85,10 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
 
   @message_stanza_handler()
   def message_received(self, stanza):
-    if stanza.body is None:
-      # She's typing
+    if stanza.stanza_type != 'chat':
+      return True
+    if not stanza.body:
+      logging.info("%s message: %s", stanza.from_jid, stanza.serialize())
       return True
 
     sender = stanza.from_jid
@@ -137,8 +139,14 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
   def update_roster(self, jid, name=NO_CHANGE, groups=NO_CHANGE):
     self.client.roster_client.update_item(jid, name, groups)
 
-  def unsubscribe(self, jid):
-    presence = Presence(to_jid=jid, stanza_type='unsubscribe')
+  def removeInvitation(self):
+    for ri in self.roster.values():
+      if ri.ask is not None:
+        self.client.roster_client.remove_item(ri.jid)
+        logging.info('%s removed', ri.jid)
+
+  def unsubscribe(self, jid, type='unsubscribe'):
+    presence = Presence(to_jid=jid, stanza_type=type)
     self.send(presence)
 
   def subscribe(self, jid):
@@ -152,23 +160,25 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
     sender = stanza.from_jid
     bare = sender.bare()
 
-    invited = self.invited.get(bare, False)
-    if invited is not False:
-      if invited is 2:
-        self.invited[bare] = 1
-      else:
-        del self.invited[bare]
-        return stanza.make_accept_response()
-      # We won't deny inivted members
-      self.handle_userjoin_before()
-    else:
-      if config.private and str(bare) != config.root:
-        return stanza.make_deny_response()
-      if not self.handle_userjoin_before():
-        return stanza.make_deny_response()
-
     # avoid repeated request
+    invited = False
     if bare not in self.subscribes:
+      invited = self.invited.get(bare, False)
+      if invited is not False:
+        if invited == 2:
+          self.invited[bare] = 1
+        else:
+          del self.invited[bare]
+          return stanza.make_accept_response()
+        # We won't deny inivted members
+        self.handle_userjoin_before()
+      else:
+        if config.private and str(bare) != config.root:
+          self.send_message(sender, _('Sorry, this is a private group, and you are not invited.'))
+          return stanza.make_deny_response()
+        if not self.handle_userjoin_before():
+          return stanza.make_deny_response()
+
       self.current_jid = sender
       self.now = datetime.datetime.utcnow()
       try:
@@ -241,9 +251,11 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
         #The server is subscribing
         pass
 
-    if config.warnv105 and jid.resource and jid.resource.startswith('Talk.v105'):
+    if config.warnv105 and jid.resource and \
+       jid.resource.startswith('Talk.') and not jid.resource.startswith('Talk.v104'):
+      # Got a Talk.v107...
       # No need to translate; GTalk only has a v105 for Chinese.
-      self.send_message(jid, '警告：你正在使用非加密版的 GTalk v105。网络上的其它人可能会截获您的消息。这样不安全！请使用 GTalk v104 英文版或者其它 XMPP 客户端。\nGTalk 英文版: http://www.google.com/talk/index.html\nPidgin: http://www.pidgin.im/')
+      self.send_message(jid, '警告：你正在使用的可能是不加密的 GTalk v105 版本。网络上的其它人可能会截获您的消息。这样不安全！请使用 GTalk v104 英文版或者其它 XMPP 客户端。\nGTalk 英文版: http://www.google.com/talk/index.html\nPidgin: http://www.pidgin.im/')
 
     return True
 
@@ -282,7 +294,7 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
   def get_vcard(self, jid, callback):
     '''callback is used as both result handler and error handler'''
     q = Iq(
-      to_jid = jid,
+      to_jid = jid.bare(),
       stanza_type = 'get'
     )
     vc = ET.Element("{vcard-temp}vCard")
