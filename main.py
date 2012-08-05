@@ -46,9 +46,15 @@ from models import ValidationError
 from messages import MessageMixin
 from user import UserMixin
 
+if getattr(config, 'conn_lost_interval_minutes', False):
+  conn_lost_interval = datetime.timedelta(minutes=config.conn_lost_interval_minutes)
+else:
+  conn_lost_interval = None
+
 class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
   got_roster = False
   message_queue = None
+  ignore = set()
 
   def disconnect(self):
     '''Request disconnection and let the main loop run for a 2 more
@@ -76,7 +82,7 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
         except AttributeError:
           timestamp = None
         self.handle_message(stanza.body, timestamp)
-      self.message_queue = None
+      self.message_queue = self.__class__.message_queue = None
 
   @event_handler(RosterReceivedEvent)
   def roster_received(self, stanze):
@@ -97,6 +103,9 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
     self.now = datetime.datetime.utcnow()
 
     logging.info('[%s] %s', sender, stanza.body)
+    if str(sender.bare()) in self.ignore:
+      logging.info('(The above message is ignored on purpose)')
+      return True
 
     if not self.got_roster:
       if not self.message_queue:
@@ -231,9 +240,15 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
     jid = stanza.from_jid
     plainjid = str(jid.bare())
     self.now = datetime.datetime.utcnow()
-    if plainjid not in self.presence:
-      logging.info('%s[%s] (new)', jid, stanza.show or 'available')
+    if plainjid not in self.presence and plainjid != str(self.jid):
+      type = 'new'
+      self.current_jid = jid
       self.user_update_presence(plainjid)
+      if conn_lost_interval and self.current_user.last_seen and \
+         self.now - self.current_user.last_seen < conn_lost_interval:
+        type = 'reconnect'
+        self.send_lost_message()
+      logging.info('%s[%s] (%s)', jid, stanza.show or 'available', type)
     else:
       logging.info('%s[%s]', jid, stanza.show or 'available')
 
@@ -244,8 +259,8 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
     }
 
     if self.get_user_by_jid(plainjid) is None and plainjid != str(self.jid):
-      self.current_jid = jid
       try:
+        self.current_jid = jid
         self.handle_userjoin()
       except ValidationError:
         #The server is subscribing
@@ -272,6 +287,7 @@ class ChatBot(MessageMixin, UserMixin, EventHandler, XMPPFeatureHandler):
         logging.info('%s[unavailable] (partly)', jid)
       else:
         del self.presence[plainjid]
+        self.now = datetime.datetime.utcnow()
         self.user_disappeared(plainjid)
         logging.info('%s[unavailable] (totally)', jid)
     return True
@@ -322,6 +338,7 @@ def runit(settings):
   except KeyboardInterrupt:
     pass
   finally:
+    ChatBot.message_queue = bot.message_queue
     bot.disconnect()
 
 def main():

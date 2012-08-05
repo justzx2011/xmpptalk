@@ -29,16 +29,18 @@ logger = logging.getLogger(__name__)
 re_youren = re.compile(r'有人在?吗.{,3}')
 re_link = re.compile(r' <https?://(?!i.imgur.com/)[^>]+>')
 re_link_js = re.compile(r' <javascript:[^>]+>')
-re_repeating_char = re.compile(r'(.)\1{4,}')
 
-filtered_message = (
-  "I'm currently away and will reply as soon as I return to eBuddy on my iPod touch",
+filtered_message_func = (
+  lambda s: s.startswith("I'm currently away and will reply as soon as I return to eBuddy on my "),
+)
+filtered_message = {
   'This is an autoreply: I am currently not available. Please leave your message, and I will get back to you as soon as possible.',
   '你好，我现在有事情不在，一会再和您联系',
   'A music messaging session has been requested. Please click the MM icon to accept.',
   '请求了音乐信使会话。请单击 MM 图标接受。',
   '<ding>', # Smack 客户端的「抖屏」
-)
+  '我已通过IM+登录在我的iPad。现在IM+已关闭，我会在IM+下次启动时看到你的消息。',
+}
 
 def cache_clear(self, msg):
   if msg == 'cache_clear':
@@ -61,6 +63,9 @@ def filter_autoreply(self, msg):
     self.reply('请不要设置自动回复或者其它自动发送的消息。')
     return True
   else:
+    for f in filtered_message_func:
+      if f(msg):
+        return True
     return False
 
 def remove_links(self, msg):
@@ -69,10 +74,7 @@ def remove_links(self, msg):
   if len(links) != 1:
     msg = re_link.sub('', msg)
   msg = re_link_js.sub('', msg)
-  new_msg = re_repeating_char.sub(r'\1\1\1', msg)
-  if msg != new_msg:
-    self.reply(_('Too many repeating characters, cleaned up to: ') + new_msg)
-  return new_msg
+  return msg
 
 def post_code(msg):
   '''将代码贴到网站，返回 URL 地址 或者 None（失败）'''
@@ -111,6 +113,6 @@ message_plugin_early = [
 ]
 message_plugin = [
   cache_clear, autoreply, filter_autoreply,
-  long_text_check,
   remove_links,
+  long_text_check,
 ]

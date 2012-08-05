@@ -94,6 +94,27 @@ def check_auth(self, msg):
   return True
 
 
+  def send_lost_message(self):
+    if self.now <= self.current_user.stop_until:
+      return
+
+    q = models.connection.Log.find(9999, self.current_user.last_seen)
+    if not q:
+      return
+
+    text = [_('Messages while you lost the connection:')]
+    for l in q:
+      try:
+        m = '%s %s' % (
+          (l.time + config.timezoneoffset).strftime(timeformat),
+          l.msg,
+        )
+      except AttributeError:
+        logger.warn('malformed log messages: %r', l)
+        continue
+      text.append(m)
+    self.reply('\n'.join(text))
+
 try:
   from plugin import message_plugin_early
   for h in message_plugin_early:
